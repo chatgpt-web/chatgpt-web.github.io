@@ -1,41 +1,223 @@
 <!DOCTYPE html>
-<html>
+<html lang="en">
+
 <head>
-<link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
-<script src="https://kit.fontawesome.com/a076d05399.js" crossorigin="anonymous"></script>
-<style>
-#icon {
-position: absolute; 
-bottom: 1.5rem; 
-left: 1.5rem; 
-font-size: 2em;
-}
-
-#ask-button {
-max-width: 100%;
-    min-width: 100%;
+  <meta charset="utf-8">
+  <meta http-equiv="X-UA-Compatible" content="IE=edge">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/bulma@0.9.4/css/bulma.min.css">
+  <link rel="stylesheet" href="./fontawesome-free-6.3.0-web/css/all.min.css">
+  <script src="https://cdn.jsdelivr.net/npm/js-cookie@3.0.1/dist/js.cookie.min.js"></script>
+	<script src="https://github.com/dirkarnez/webpack-umd-action/releases/download/eventsource-parser.0.1.0/eventsource-parser.0.1.0.min.js"></script>
+	<script>
+		window.key = "OPENAI";
+	</script>
+  <style>
+    #icon {
+      position: absolute;
+      bottom: 1.5rem;
+      left: 1.5rem;
+      font-size: 2em;
     }
-    
-</style>
-</head>
-<body>
 
-<p class="panel-tabs">
-    <a class="is-active">All</a>
-    <a>Key</a>
-  </p>
-  <a class="panel-block" style="position: relative">
-      <textarea class="textarea"></textarea>
-      <span id="icon" class="icon">
-        <i class="fas fa-microphone"></i>
-      </span>
-  </a>
-      <a class="panel-block"><button class="button is-link" id="ask-button">問</button>
-  </a>
-    <a class="panel-block">
-<div class="block">
-  This text is within a <strong>block</strong>.
-</div>
-  </a>
+    #ask-button {
+      max-width: 100%;
+      min-width: 100%;
+    }
+
+    .panel-block {
+      cursor: unset;
+      background-color: unset !important;
+      border: 0 !important;
+    }
+  </style>
+</head>
+
+<body>
+  <div id="app"></div>
+  <script type="text/javascript">
+		if (!ReadableStream.prototype[Symbol.asyncIterator]) {
+			ReadableStream.prototype[Symbol.asyncIterator] = async function* () {
+				const reader = this.getReader();
+				try {
+					while (true) {
+						const { done, value } = await reader.read();
+						if (done) {
+							return;
+						}
+						yield value;
+					}
+				}
+				finally {
+					reader.releaseLock();
+				}
+			}
+		}
+
+		async function OpenAIStream(apiKey) {
+			const encoder = new TextEncoder();
+			const decoder = new TextDecoder();
+
+			let counter = 0;
+			const res = fetch("https://api.openai.com/v1/completions", {
+				method: 'POST', // *GET, POST, PUT, DELETE, etc.
+				cache: 'no-cache', // *default, no-cache, reload, force-cache, only-if-cached
+				headers: {
+					'Content-Type': 'application/json',
+					'Authorization': `Bearer ${apiKey}`,
+				},
+				body: JSON.stringify({
+					// model:"text-chat-davinci-002-20230126",
+					// model:"text-chat-davinci-003",
+
+					model: "text-davinci-003",
+					// model:"text-curie-001",
+					prompt: document.getElementById("ask-textarea").value, //"what is the difference between fourier transform and laplace transform?",
+					temperature: 0.7,
+					top_p: 1,
+					frequency_penalty: 0,
+					presence_penalty: 0,
+					max_tokens: 4000,
+					stream: true,
+					n: 1,
+				}) // body data type must match "Content-Type" header
+			});
+
+			const stream = new ReadableStream({
+				async start(controller) {
+					// callback
+					function onParse(event) {
+						if (event.type === "event") {
+							const data = event.data;
+							// https://beta.openai.com/docs/api-reference/completions/create#completions/create-stream
+							if (data === "[DONE]") {
+								controller.close();
+								return;
+							}
+							try {
+								const json = JSON.parse(data);
+								const text = json.choices[0].text;
+								if (counter < 2 && (text.match(/\n/) || []).length) {
+									// this is a prefix character (i.e., "\n\n"), do nothing
+									return;
+								}
+								const queue = encoder.encode(text);
+								controller.enqueue(queue);
+								counter++;
+							} catch (e) {
+								// maybe parse error
+								controller.error(e);
+							}
+						}
+					}
+
+					// stream response (SSE) from OpenAI may be fragmented into multiple chunks
+					// this ensures we properly read chunks and invoke an event for each SSE event stream
+					const parser = window.eventsourceParser.createParser(onParse);
+					// https://web.dev/streams/#asynchronous-iteration
+
+					res.then(async r => {
+						for await (const chunk of r.body) {
+							parser.feed(decoder.decode(chunk));
+						}
+					})
+				},
+			});
+
+			return new Response(stream);
+		}
+
+    window.HandleAsk = (apiKey, callback) => {
+      OpenAIStream(apiKey)
+      .then(async response => {
+          const data = response.body;
+          if (!data) {
+
+          }
+          const decoder = new TextDecoder();
+          for await (const chunk of data) {
+            callback(decoder.decode(chunk));
+          }
+      });
+    }
+  </script>
+  
+  <script type="text/babel">
+    function Application() {
+      const [ currentActiveTabIndex, setCurrentActiveTabIndex ] = React.useState(0);
+      const [ currentAnswer, setCurrentAnswer ] = React.useState("");
+      const [ currentKey, setCurrentKey ] = React.useState("");
+
+      React.useEffect(() => {
+        setCurrentKey(Cookies.get(window.key) || "");
+      }, []);
+
+      React.useEffect(() => {
+        Cookies.set(window.key, currentKey);
+      }, [currentKey]);
+      
+      return (
+        <React.Fragment>
+          <div className="tabs is-centered">
+            <ul>
+                {
+                  ["Chat", "Key"].map((name, index) => (
+                    <li 
+                      className={index == currentActiveTabIndex ? "is-active" : ""} key={name} 
+                      onClick={() => setCurrentActiveTabIndex(index)}>
+                      <a>{name}</a>
+                    </li>
+                  ))
+                }
+            </ul>
+          </div>
+
+          {
+            currentActiveTabIndex == 0 &&
+              <React.Fragment>
+              <div className="panel-block" style={{position: "relative"}}>
+                <textarea id="ask-textarea" className="textarea"></textarea>
+                <span id="icon" className="icon">
+                  <i className="fas fa-microphone"></i>
+                </span>
+              </div>
+              <div className="panel-block"><button className="button is-link" id="ask-button" onClick={() => {
+                setCurrentAnswer("");
+                
+                HandleAsk(currentKey, (append => {
+                  setCurrentAnswer(prev => prev + append);
+                }));
+              }}>問</button>
+              </div>
+              <div className="panel-block" id="answer-block">
+                <div className="block">
+                  {currentAnswer && currentAnswer}
+                </div>
+              </div>
+            </React.Fragment>
+          }
+
+          {
+            currentActiveTabIndex == 1 &&
+              <React.Fragment>
+              <div className="panel-block" style={{position: "relative"}}>
+                <input className="input" type="text" value={currentKey} onInput={event => {
+                  setCurrentKey(event.target.value);
+                }}/>
+              </div>
+            </React.Fragment>
+          }
+
+        </React.Fragment>
+      )
+    }
+    ReactDOM.createRoot(document.getElementById('app')).render(<Application />);
+  </script>
+  <script src="https://unpkg.com/react@18.1.0/umd/react.development.js"></script>
+  <!-- https://unpkg.com/react@18.2.0/umd/react.production.min.js -->
+  <script src="https://unpkg.com/react-dom@18.1.0/umd/react-dom.development.js"></script>
+  <!-- https://unpkg.com/react-dom@18.2.0/umd/react-dom.production.min.js -->
+  <script src="https://unpkg.com/babel-standalone@6.26.0/babel.min.js"></script>
 </body>
+
 </html>
