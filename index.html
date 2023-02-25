@@ -193,7 +193,7 @@
                 HandleAsk(currentKey, question, (append => {
                   setCurrentAnswer(prev => prev + append);
                 }));
-              }}>問</button>
+              }} disabled={!question || question.trim().length < 1}>問</button>
               </div>
               <div className="panel-block" id="answer-block">
                 <div className="block" style={{ whiteSpace: "pre"}}>
