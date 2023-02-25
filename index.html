@@ -54,7 +54,7 @@
 			}
 		}
 
-		async function OpenAIStream(apiKey) {
+		async function OpenAIStream(apiKey, question) {
 			const encoder = new TextEncoder();
 			const decoder = new TextDecoder();
 
@@ -72,7 +72,7 @@
 
 					model: "text-davinci-003",
 					// model:"text-curie-001",
-					prompt: document.getElementById("ask-textarea").value, //"what is the difference between fourier transform and laplace transform?",
+					prompt: question, //document.getElementById("ask-textarea").value, //"what is the difference between fourier transform and laplace transform?",
 					temperature: 0.7,
 					top_p: 1,
 					frequency_penalty: 0,
@@ -127,8 +127,8 @@
 			return new Response(stream);
 		}
 
-    window.HandleAsk = (apiKey, callback) => {
-      OpenAIStream(apiKey)
+    window.HandleAsk = (apiKey, question, callback) => {
+      OpenAIStream(apiKey, question)
       .then(async response => {
           const data = response.body;
           if (!data) {
@@ -145,6 +145,7 @@
   <script type="text/babel">
     function Application() {
       const [ currentActiveTabIndex, setCurrentActiveTabIndex ] = React.useState(0);
+      const [ question, setQuestion ] = React.useState("");
       const [ currentAnswer, setCurrentAnswer ] = React.useState("");
       const [ currentKey, setCurrentKey ] = React.useState("");
 
@@ -176,21 +177,26 @@
             currentActiveTabIndex == 0 &&
               <React.Fragment>
               <div className="panel-block" style={{position: "relative"}}>
-                <textarea id="ask-textarea" className="textarea"></textarea>
+                <textarea className="textarea" value={question} onChange={event => setQuestion(event.target.value)}></textarea>
                 <span id="icon" className="icon">
                   <i className="fas fa-microphone"></i>
                 </span>
               </div>
               <div className="panel-block"><button className="button is-link" id="ask-button" onClick={() => {
+                if (!currentKey) {
+                  alert("No ChatGPT key is provided");
+                  return;
+                }
+
                 setCurrentAnswer("");
                 
-                HandleAsk(currentKey, (append => {
+                HandleAsk(currentKey, question, (append => {
                   setCurrentAnswer(prev => prev + append);
                 }));
               }}>問</button>
               </div>
               <div className="panel-block" id="answer-block">
-                <div className="block">
+                <div className="block" style={{ whiteSpace: "pre"}}>
                   {currentAnswer && currentAnswer}
                 </div>
               </div>
