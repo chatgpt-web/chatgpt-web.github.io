@@ -18,6 +18,12 @@
       bottom: 1.5rem;
       left: 1.5rem;
       font-size: 2em;
+      padding: 1.2rem;
+    }
+
+    #icon:hover {
+      border: 1px solid #ccc!important;
+      border-radius: 0.2rem;
     }
 
     #ask-button {
@@ -140,6 +146,21 @@
           }
       });
     }
+
+    const recognition = new (webkitSpeechRecognition || SpeechRecognition)();
+      recognition.lang = 'yue-Hant-HK';
+      recognition.continuous = false;
+      recognition.interimResults = true;
+      recognition.maxAlternatives = 1;
+
+      function startRecognition(callback) {
+        recognition.abort();
+        recognition.onresult = event => {
+          const result = event.results[0][0].transcript;
+          callback(result);
+        };
+        recognition.start();
+      }
   </script>
   
   <script type="text/babel">
@@ -155,7 +176,7 @@
 
       React.useEffect(() => {
         Cookies.set(window.key, currentKey);
-      }, [currentKey]);
+      }, [currentKey]); 
       
       return (
         <React.Fragment>
@@ -178,7 +199,9 @@
               <React.Fragment>
               <div className="panel-block" style={{position: "relative"}}>
                 <textarea className="textarea" value={question} onChange={event => setQuestion(event.target.value)}></textarea>
-                <span id="icon" className="icon">
+                <span id="icon" className="icon" onClick={() => {                 
+                  startRecognition(result => setQuestion(result));
+                }}>
                   <i className="fas fa-microphone"></i>
                 </span>
               </div>
